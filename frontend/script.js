@@ -3,7 +3,7 @@
 /* =========================================================
    Configuration
    ========================================================= */
-const API_BASE_URL = "http://localhost:8000";
+const API_BASE_URL = "https://codepilot-ai-q2ia.onrender.com";
 
 const SUPPORTED_LANGUAGES = [
   "python", "cpp", "java", "javascript", "typescript", "html", "css", "sql",
