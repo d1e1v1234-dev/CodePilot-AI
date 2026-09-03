@@ -25,12 +25,10 @@ class Settings:
     # development. The frontend has no build step and may be served
     # by different static servers (Vite-style dev server on 5173,
     # or Python's http.server on 5500), so both are allowed.
-    CORS_ORIGINS: list[str] = [
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:5500",
-        "http://127.0.0.1:5500",
-    ]
+    CORS_ORIGINS = [
+    "http://localhost:5173",
+    "https://codepilot-ai-zeta.vercel.app",
+]
 
 
 settings = Settings()
