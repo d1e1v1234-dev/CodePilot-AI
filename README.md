@@ -1,95 +1,132 @@
-# CodePilot AI — Backend
+# CodePilot AI
 
-An AI-powered Python code review and bug-fixing agent. Users submit
-Python code (pasted text or a code screenshot), and the backend
-returns a structured review — bugs, security issues, performance
-problems, and code-quality/best-practice violations — grounded in a
-small retrieval-augmented knowledge base, with an optional automatic
-fix that is statically validated before being returned.
+An AI-powered code review and bug-fixing agent. Users submit code —
+pasted text or a screenshot — in one of several supported languages,
+and the system returns a structured review (bugs, security issues,
+performance problems, code-quality/best-practice violations), grounded
+in a small retrieval-augmented knowledge base for Python, with an
+optional automatic fix that is statically validated (Python only)
+before being returned.
+
+The project has two parts:
+
+- **`backend/`** — FastAPI + Gemini + RAG (ChromaDB) + LangGraph agent
+- **`frontend/`** — plain HTML/CSS/vanilla JavaScript IDE-style UI
+
+No React, Vite, Next.js, or any frontend framework is used.
+
+---
 
 ## Features
 
-- **Code review**: Gemini reviews submitted Python code and returns a
-  structured list of issues, strengths, and an overall score.
-- **RAG-grounded review**: Relevant excerpts from a local knowledge
-  base (PEP 8, common Python errors, OWASP basics, FastAPI best
-  practices) are retrieved via ChromaDB and given to Gemini as
-  supporting context — not blindly appended, and not treated as
-  ground truth to copy from.
+- **Multi-language code review**: Gemini reviews submitted code in
+  Python, C++, Java, JavaScript, TypeScript, HTML, CSS, or SQL, and
+  returns a structured list of issues, strengths, and an overall
+  score.
+- **RAG-grounded review (Python only)**: For Python code, relevant
+  excerpts from a local knowledge base (PEP 8, common Python errors,
+  OWASP basics, FastAPI best practices) are retrieved via ChromaDB and
+  given to Gemini as supporting context — not blindly appended, and
+  not treated as ground truth to copy from. For all other languages,
+  no RAG context is attached (the knowledge base is Python/FastAPI
+  specific); the review still runs normally using Gemini's own
+  language-aware knowledge.
 - **Agentic workflow (LangGraph)**: Review, fix generation, and
   validation are orchestrated as a graph with a bounded retry loop
   (up to 2 retries) when a generated fix fails validation.
 - **Automatic fix generation**: When issues are found, Gemini
   generates a corrected version of the code with an explanation of
-  what changed.
-- **Static validation of fixes**: Generated fixes are validated using
-  Python's `ast` module (syntax check) and `ruff` (static analysis) —
-  **not** by executing the code. See "What validation means" below
-  for what this does and does not guarantee.
+  what changed, in the same language as the input.
+- **Static validation of fixes (Python only)**: Generated Python fixes
+  are validated using Python's `ast` module (syntax check) and `ruff`
+  (static analysis) — **not** by executing the code. For all other
+  languages, the UI and API clearly report that static validation is
+  not available, rather than faking a result. See "What validation
+  means" below.
 - **Screenshot → code extraction**: Upload a PNG/JPG/WEBP image of
   code and Gemini's multimodal capability transcribes it into text,
-  with a confidence score and notes on any unreadable portions.
+  detects the language, and reports a confidence score plus notes on
+  any unreadable portions.
+- **IDE-style frontend**: A dark, developer-tool-style UI with a code
+  editor, language selector, drag-and-drop screenshot upload, agent
+  progress indicator, issue/strength/source breakdown, and an
+  original-vs-fixed code diff with copy buttons — built with plain
+  HTML/CSS/JS, no build step required.
 
 ## Tech Stack
 
+**Backend**
 - **FastAPI** + **Uvicorn** — HTTP API
 - **Pydantic** — request/response validation and structured LLM output
 - **Gemini** (via `langchain-google-genai`) — code understanding,
   structured review/fix generation, and image-to-code extraction
-- **ChromaDB** — local vector store for RAG
+- **ChromaDB** — local vector store for RAG (Python knowledge base)
 - **LangGraph** — orchestrates the review → fix → validate workflow
 - **Ruff** — static Python analysis for fix validation
 - **pytest** — test suite (all Gemini calls mocked, no live API calls
   needed to run tests)
 
+**Frontend**
+- Plain **HTML**, **CSS**, and **vanilla JavaScript** — no framework,
+  no build step, no bundler
+- Served as static files by any simple HTTP server
+
 ## Folder Structure
 
 ```
-backend/
-├── app/
-│   ├── main.py                    # FastAPI app and routes
-│   ├── config.py                  # env-based settings
-│   ├── knowledge/                 # RAG source documents (Markdown)
-│   │   ├── python_best_practices.md
-│   │   ├── python_common_errors.md
-│   │   ├── owasp_security_basics.md
-│   │   └── fastapi_best_practices.md
-│   ├── models/
-│   │   ├── review.py              # review/fix/validation schemas
-│   │   └── extract.py             # image-extraction schema
-│   ├── services/
-│   │   ├── gemini.py              # Gemini wrapper (text, structured, image)
-│   │   ├── rag.py                 # ChromaDB indexing + retrieval
-│   │   ├── review.py              # public entry point, invokes the graph
-│   │   ├── validation.py          # AST + Ruff static validation
-│   │   └── extract.py             # image -> code extraction service
-│   └── agents/
-│       ├── state.py               # typed LangGraph state
-│       ├── graph.py               # compiled workflow
-│       └── nodes/
-│           ├── retrieve.py        # RAG retrieval node
-│           ├── review.py          # Gemini review node
-│           ├── generate_fix.py    # Gemini fix-generation node
-│           ├── validate_fix.py    # static validation node
-│           └── decision.py        # finalize + retry routing
-├── scripts/
-│   └── build_index.py             # one-time/on-demand RAG indexing
-├── tests/                         # pytest suite
-├── chroma_db/                     # generated vector store (gitignored)
-├── requirements.txt
-├── .gitignore
-└── .env                           # not committed; see below
+project-root/
+├── backend/
+│   ├── app/
+│   │   ├── main.py                    # FastAPI app and routes
+│   │   ├── config.py                  # env-based settings
+│   │   ├── knowledge/                 # RAG source docs (Python-specific)
+│   │   │   ├── python_best_practices.md
+│   │   │   ├── python_common_errors.md
+│   │   │   ├── owasp_security_basics.md
+│   │   │   └── fastapi_best_practices.md
+│   │   ├── models/
+│   │   │   ├── review.py              # review/fix/validation schemas
+│   │   │   └── extract.py             # image-extraction schema
+│   │   ├── services/
+│   │   │   ├── gemini.py              # Gemini wrapper (text, structured, image)
+│   │   │   ├── rag.py                 # ChromaDB indexing + retrieval
+│   │   │   ├── review.py              # public entry point, invokes the graph
+│   │   │   ├── validation.py          # AST + Ruff static validation
+│   │   │   └── extract.py             # image -> code extraction service
+│   │   └── agents/
+│   │       ├── state.py               # typed LangGraph state
+│   │       ├── graph.py               # compiled workflow
+│   │       └── nodes/
+│   │           ├── retrieve.py        # RAG retrieval node (Python-only)
+│   │           ├── review.py          # Gemini review node (language-aware)
+│   │           ├── generate_fix.py    # Gemini fix-generation node
+│   │           ├── validate_fix.py    # static validation node (Python-only)
+│   │           └── decision.py        # finalize + retry routing
+│   ├── scripts/
+│   │   └── build_index.py             # one-time/on-demand RAG indexing
+│   ├── tests/                         # pytest suite
+│   ├── chroma_db/                     # generated vector store (gitignored)
+│   ├── requirements.txt
+│   ├── .gitignore
+│   └── .env                           # not committed; see below
+└── frontend/
+    ├── index.html                     # page structure
+    ├── style.css                      # dark IDE-style theme
+    └── script.js                      # API calls, rendering, state
 ```
 
-## Setup
+---
+
+## Backend Setup
 
 ```bash
+cd backend
 python -m venv venv
 source venv/bin/activate      # on Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-## Environment configuration
+### Environment configuration
 
 Create a `.env` file in `backend/` with:
 
@@ -104,7 +141,11 @@ GEMINI_MODEL=gemini-3.5-flash-lite
 GEMINI_EMBEDDING_MODEL=models/gemini-embedding-001
 ```
 
-## Build the RAG knowledge index
+> Model availability can vary by API key/account/region. If a model
+> hangs or errors, try overriding `GEMINI_MODEL` with a different
+> currently-available Gemini model name.
+
+### Build the RAG knowledge index
 
 Run once, and again any time you edit files in `app/knowledge/`:
 
@@ -112,11 +153,11 @@ Run once, and again any time you edit files in `app/knowledge/`:
 python scripts/build_index.py
 ```
 
-This embeds the knowledge documents and persists them to `chroma_db/`
-(gitignored). The index is loaded from disk on every request — it is
-**not** rebuilt per request.
+This embeds the (Python-specific) knowledge documents and persists
+them to `chroma_db/` (gitignored). The index is loaded from disk on
+every request — it is **not** rebuilt per request.
 
-## Run the backend
+### Run the backend
 
 ```bash
 uvicorn app.main:app --reload
@@ -124,6 +165,58 @@ uvicorn app.main:app --reload
 
 API available at `http://localhost:8000`, interactive docs at
 `http://localhost:8000/docs`.
+
+### CORS
+
+The backend allows the following local development origins:
+
+```
+http://localhost:5173
+http://127.0.0.1:5173
+http://localhost:5500
+http://127.0.0.1:5500
+```
+
+This covers both a Vite-style dev server (`5173`) and Python's
+built-in static server (`5500`) — the two most common ways to serve
+the plain HTML/CSS/JS frontend locally. `allow_origins=["*"]` is
+never used.
+
+---
+
+## Frontend Setup
+
+The frontend has no dependencies and no build step. Serve it with any
+static file server, for example:
+
+```bash
+cd frontend
+python -m http.server 5500
+```
+
+Then open `http://localhost:5500` in your browser. The backend must
+already be running on `http://localhost:8000` (hardcoded as
+`API_BASE_URL` in `script.js`).
+
+### What the frontend does
+
+- Lets you paste code directly into an editor, or drag-and-drop /
+  browse a code screenshot for extraction.
+- A language dropdown (Python, C++, Java, JavaScript, TypeScript,
+  HTML, CSS, SQL) controls both the editor's placeholder text and the
+  `language` field sent to `/api/review`. Screenshot extraction
+  automatically updates the dropdown if a supported language is
+  detected.
+- Shows an agent progress indicator (Retrieve Context → Review Code →
+  Generate Fix → Validate Fix → Done) while a review is in flight.
+- Renders the score, summary, issues (with severity/category/line),
+  strengths, RAG sources (Python only), static validation status, fix
+  explanation, and an original-vs-fixed code diff with a copy button.
+- Clearly labels validation as **static analysis only** and shows
+  "Static validation is currently available for Python only" for
+  every other language, rather than presenting a fake result.
+
+---
 
 ## API Endpoints
 
@@ -157,28 +250,42 @@ and model are configured correctly.
 
 ### `POST /api/review`
 
-The core feature. Accepts Python code and returns a full review.
+The core feature. Accepts code in a supported language and returns a
+full review.
 
 **Request:**
 ```json
-{ "code": "def divide(a, b): return a / b" }
+{ "code": "def divide(a, b): return a / b", "language": "python" }
 ```
+
+`language` is optional and defaults to `"python"` for backward
+compatibility with clients that only send `{"code": "..."}`. If a
+`language` value is provided but is not one of the supported
+languages, the API responds with **HTTP 400** and does not run the
+review workflow.
+
+**Supported languages:** `python`, `cpp`, `java`, `javascript`,
+`typescript`, `html`, `css`, `sql`.
 
 **What happens internally:**
 
-1. **RAG retrieval** — relevant knowledge-base excerpts are retrieved
-   from ChromaDB based on the submitted code.
-2. **Gemini review** — the code + retrieved context are sent to
-   Gemini, which returns a structured review (issues, strengths,
-   overall score).
+1. **RAG retrieval** — for Python only, relevant knowledge-base
+   excerpts are retrieved from ChromaDB based on the submitted code.
+   For all other languages, no RAG context is retrieved or attached.
+2. **Gemini review** — the code (+ retrieved context, if any) is sent
+   to Gemini with a language-aware prompt, which returns a structured
+   review (issues, strengths, overall score).
 3. **Fix generation** — if issues were found, Gemini generates a
-   corrected version of the code with an explanation.
-4. **Static validation** — the generated fix is checked with `ast`
-   (syntax) and `ruff` (lint/correctness rules), **without executing
-   any code**.
-5. **Retry loop** — if validation fails and a fix was actually
+   corrected version of the code (same language) with an explanation.
+4. **Static validation** — for Python fixes only, the generated code
+   is checked with `ast` (syntax) and `ruff` (lint/correctness rules),
+   **without executing any code**. For other languages, validation is
+   reported as unavailable rather than faked.
+5. **Retry loop** — if Python validation fails and a fix was actually
    changed, the workflow retries fix generation (feeding back the
-   validation errors) up to 2 times before giving up.
+   validation errors) up to 2 times before giving up. For non-Python
+   languages, validation always reports as "not applicable" and the
+   retry loop does not trigger.
 
 All of the above is orchestrated as a LangGraph workflow
 (`retrieve_context → review_code → generate_fix → validate_fix →
@@ -210,14 +317,20 @@ decision`, with a conditional retry edge back to `generate_fix`).
     "tool": "ruff",
     "messages": []
   },
-  "retry_count": 0
+  "retry_count": 0,
+  "language": "python"
 }
 ```
 
-`fixed_code`, `fix_explanation`, `validation`, and `retry_count` are
-new fields on top of the original review response and are always
-present, but `fixed_code`/`fix_explanation`/`validation` may be `null`
-if no fix was needed or fix generation itself failed.
+For a non-Python language, `sources` will be an empty list and
+`validation` will report `tool: "none"` with a message explaining that
+static validation isn't available for that language, rather than a
+fabricated `valid: true/false`.
+
+`fixed_code`, `fix_explanation`, `validation`, `retry_count`, and
+`language` are fields on top of the original review response and are
+always present, but `fixed_code`/`fix_explanation`/`validation` may be
+`null` if no fix was needed or fix generation itself failed.
 
 ---
 
@@ -225,7 +338,7 @@ if no fix was needed or fix generation itself failed.
 
 Upload an image (PNG, JPG/JPEG, or WEBP; max 8MB) containing a
 screenshot of code. Gemini's multimodal capability transcribes the
-visible code.
+visible code and detects its language.
 
 **Request (curl):**
 ```bash
@@ -244,26 +357,36 @@ curl -X POST http://localhost:8000/api/extract-code \
 ```
 
 The extracted code is **not** executed — it is returned as text only,
-for the user to review and optionally submit to `/api/review`.
+for the user to review and optionally submit to `/api/review`. The
+frontend automatically updates its language selector if the detected
+language is one of the 8 supported values.
 
 You can also test this endpoint interactively via Swagger:
 1. Open `http://localhost:8000/docs`
 2. Expand **POST /api/extract-code**
 3. Click **Try it out**, choose an image file, click **Execute**
 
+---
+
 ## ⚠️ What "validation" means here
 
-`validation.valid: true` means the generated fix **passed static
-analysis** — it is syntactically valid Python (via `ast.parse`) and
-passed Ruff's lint checks. It does **not** mean the code was executed,
-tested, or confirmed to produce correct runtime behavior. No
-user-submitted or LLM-generated code is ever executed by this
-backend. Runtime correctness (unit tests, execution, output
-verification) is out of scope for the current implementation.
+`validation.valid: true` for Python means the generated fix **passed
+static analysis** — it is syntactically valid Python (via
+`ast.parse`) and passed Ruff's lint checks. It does **not** mean the
+code was executed, tested, or confirmed to produce correct runtime
+behavior.
+
+For every other supported language, no static validation is performed
+at all; the API and UI say so explicitly rather than returning a
+misleading pass/fail. No user-submitted or LLM-generated code is ever
+executed by this backend, in any language. Runtime correctness (unit
+tests, execution, output verification) is out of scope for the
+current implementation.
 
 ## Testing
 
 ```bash
+cd backend
 pytest tests/ -v
 ```
 
@@ -284,6 +407,22 @@ required to run the test suite. Tests cover:
   server-side only.
 - Uploaded images are processed in memory and never written to disk.
 - No user-submitted or AI-generated code is ever executed by the
-  server.
-- CORS is restricted to `http://localhost:5173` (the frontend dev
-  server).
+  server, in any language.
+- CORS is restricted to an explicit allowlist of local development
+  origins (`5173` and `5500` on `localhost`/`127.0.0.1`) — never
+  `allow_origins=["*"]`.
+
+## Running the full app locally
+
+```bash
+# Terminal 1 — backend
+cd backend
+source venv/bin/activate
+uvicorn app.main:app --reload
+
+# Terminal 2 — frontend
+cd frontend
+python -m http.server 5500
+```
+
+Then open `http://localhost:5500` in your browser.
