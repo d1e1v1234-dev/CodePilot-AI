@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CodePilot AI — Code Review & Bug Fixing Agent</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ===== Header ===== -->
+  <header class="app-header">
+    <div class="header-left">
+      <div class="logo-mark">&lt;/&gt;</div>
+      <div class="header-titles">
+        <h1>CodePilot AI</h1>
+        <p class="subtitle">AI Code Review &amp; Bug Fixing Agent</p>
+      </div>
+    </div>
+    <div class="header-right">
+      <span class="badge badge-gemini">Gemini</span>
+      <span class="badge badge-rag">RAG</span>
+      <span class="badge badge-langgraph">LangGraph</span>
+      <span class="status-dot" id="backendStatusDot" title="Backend status"></span>
+      <span class="status-text" id="backendStatusText">checking…</span>
+    </div>
+  </header>
+
+  <!-- ===== Agent Progress Bar ===== -->
+  <div class="agent-progress" id="agentProgress" aria-live="polite">
+    <div class="progress-step" data-step="retrieve">
+      <span class="step-dot"></span><span class="step-label">Retrieve Context</span>
+    </div>
+    <div class="progress-line"></div>
+    <div class="progress-step" data-step="review">
+      <span class="step-dot"></span><span class="step-label">Review Code</span>
+    </div>
+    <div class="progress-line"></div>
+    <div class="progress-step" data-step="fix">
+      <span class="step-dot"></span><span class="step-label">Generate Fix</span>
+    </div>
+    <div class="progress-line"></div>
+    <div class="progress-step" data-step="validate">
+      <span class="step-dot"></span><span class="step-label">Validate Fix</span>
+    </div>
+    <div class="progress-line"></div>
+    <div class="progress-step" data-step="done">
+      <span class="step-dot"></span><span class="step-label">Done</span>
+    </div>
+  </div>
+
+  <!-- ===== Main Layout ===== -->
+  <main class="main-layout">
+
+    <!-- ---------- LEFT: Input Panel ---------- -->
+    <section class="panel input-panel">
+
+      <div class="panel-header">
+        <h2>Source Code</h2>
+        <div class="lang-select-wrapper">
+          <span class="lang-dot" id="langDot"></span>
+          <select id="languageSelect" class="lang-select">
+            <option value="python">Python</option>
+            <option value="cpp">C++</option>
+            <option value="java">Java</option>
+            <option value="javascript">JavaScript</option>
+            <option value="typescript">TypeScript</option>
+            <option value="html">HTML</option>
+            <option value="css">CSS</option>
+            <option value="sql">SQL</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="editor-wrapper">
+        <div class="editor-gutter" id="editorGutter">1</div>
+        <textarea
+          id="codeInput"
+          class="code-editor"
+          spellcheck="false"
+        ></textarea>
+      </div>
+
+      <!-- Drag & drop / upload area -->
+      <div class="upload-area" id="uploadArea">
+        <input type="file" id="fileInput" accept=".png,.jpg,.jpeg,.webp" hidden />
+        <div class="upload-icon">⇪</div>
+        <p class="upload-text">
+          Drag &amp; drop a code screenshot here, or
+          <button type="button" class="link-btn" id="browseBtn">browse a file</button>
+        </p>
+        <p class="upload-hint">PNG, JPG, JPEG or WEBP — max 8MB</p>
+        <div class="upload-filename" id="uploadFilename"></div>
+      </div>
+
+      <div class="action-row">
+        <button class="btn btn-secondary" id="extractBtn" disabled>
+          <span class="btn-spinner" hidden></span>
+          Extract Code
+        </button>
+        <button class="btn btn-primary" id="reviewBtn">
+          <span class="btn-spinner" hidden></span>
+          Review Code
+        </button>
+        <button class="btn btn-ghost" id="clearBtn">Clear</button>
+      </div>
+
+      <div class="alert alert-error" id="errorBox" hidden></div>
+    </section>
+
+    <!-- ---------- RIGHT: Results Panel ---------- -->
+    <section class="panel results-panel" id="resultsPanel">
+
+      <div class="empty-state" id="emptyState">
+        <div class="empty-icon">🛰️</div>
+        <p>Submit code to see the AI review, RAG sources, and generated fix here.</p>
+      </div>
+
+      <div class="results-content" id="resultsContent" hidden>
+
+        <!-- Score + Summary -->
+        <div class="score-card">
+          <div class="score-circle" id="scoreCircle">
+            <span id="scoreValue">--</span>
+          </div>
+          <div class="score-details">
+            <h3>Overall Score</h3>
+            <p class="summary-text" id="summaryText"></p>
+          </div>
+        </div>
+
+        <!-- Issues -->
+        <div class="result-block">
+          <h3 class="block-title">Issues <span class="count-badge" id="issuesCount">0</span></h3>
+          <div id="issuesList" class="issues-list"></div>
+        </div>
+
+        <!-- Strengths -->
+        <div class="result-block">
+          <h3 class="block-title">Strengths</h3>
+          <ul id="strengthsList" class="strengths-list"></ul>
+        </div>
+
+        <!-- RAG Sources -->
+        <div class="result-block">
+          <h3 class="block-title">RAG Sources <span class="count-badge" id="sourcesCount">0</span></h3>
+          <div id="sourcesList" class="sources-list"></div>
+        </div>
+
+        <!-- Validation -->
+        <div class="result-block">
+          <h3 class="block-title">Static Validation</h3>
+          <div class="validation-note">
+            Static analysis only (AST + Ruff) — does <strong>not</strong> confirm runtime correctness.
+          </div>
+          <div id="validationBox" class="validation-box"></div>
+        </div>
+
+        <!-- Fix explanation -->
+        <div class="result-block" id="fixExplanationBlock" hidden>
+          <h3 class="block-title">Fix Explanation</h3>
+          <p class="fix-explanation-text" id="fixExplanationText"></p>
+        </div>
+
+        <!-- Original vs Fixed code -->
+        <div class="result-block" id="codeDiffBlock" hidden>
+          <h3 class="block-title">Original vs Fixed Code</h3>
+          <div class="code-diff-grid">
+            <div class="code-column">
+              <div class="code-column-header">
+                <span>Original</span>
+              </div>
+              <pre class="code-block" id="originalCodeBlock"></pre>
+            </div>
+            <div class="code-column">
+              <div class="code-column-header">
+                <span>Fixed</span>
+                <button class="copy-btn" id="copyFixedBtn">Copy</button>
+              </div>
+              <pre class="code-block" id="fixedCodeBlock"></pre>
+            </div>
+          </div>
+          <div class="retry-info" id="retryInfo"></div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="app-footer">
+    <span>CodePilot AI — MVP</span>
+    <span id="apiTarget">Backend: http://localhost:8000</span>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
