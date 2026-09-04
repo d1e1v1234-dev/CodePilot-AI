@@ -163,8 +163,8 @@ every request — it is **not** rebuilt per request.
 uvicorn app.main:app --reload
 ```
 
-API available at `http://localhost:8000`, interactive docs at
-`http://localhost:8000/docs`.
+API available at `https://codepilot-ai-q2ia.onrender.com`, interactive docs at
+`https://codepilot-ai-q2ia.onrender.com/docs`.
 
 ### CORS
 
@@ -195,7 +195,7 @@ python -m http.server 5500
 ```
 
 Then open `http://localhost:5500` in your browser. The backend must
-already be running on `http://localhost:8000` (hardcoded as
+already be running on `https://codepilot-ai-q2ia.onrender.com` (hardcoded as
 `API_BASE_URL` in `script.js`).
 
 ### What the frontend does
@@ -342,7 +342,7 @@ visible code and detects its language.
 
 **Request (curl):**
 ```bash
-curl -X POST http://localhost:8000/api/extract-code \
+curl -X POST https://codepilot-ai-q2ia.onrender.com/api/extract-code \
   -F "file=@screenshot.png;type=image/png"
 ```
 
@@ -362,7 +362,7 @@ frontend automatically updates its language selector if the detected
 language is one of the 8 supported values.
 
 You can also test this endpoint interactively via Swagger:
-1. Open `http://localhost:8000/docs`
+1. Open `https://codepilot-ai-q2ia.onrender.com/docs`
 2. Expand **POST /api/extract-code**
 3. Click **Try it out**, choose an image file, click **Execute**
 
