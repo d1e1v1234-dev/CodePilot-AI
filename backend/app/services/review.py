@@ -10,9 +10,14 @@ normalize an unsupported language to Python; "python" is only used
 as a default when the caller passes an empty/None language.
 """
 
+import logging
+import time
+
 from app.agents.graph import review_graph
 from app.agents.state import ReviewState
 from app.models.review import ReviewResponse
+
+logger = logging.getLogger("codepilot.services.review")
 
 
 class ReviewServiceError(Exception):
@@ -35,12 +40,18 @@ class ReviewService:
             "retry_count": 0,
         }
 
+        start = time.perf_counter()
         try:
             final_state: ReviewState = review_graph.invoke(initial_state)
         except Exception as exc:  # noqa: BLE001 - never leak internals
+            elapsed = time.perf_counter() - start
+            logger.info("[PERF] Total review: %.2fs", elapsed)
             raise ReviewServiceError(
                 "Failed to complete the code review workflow."
             ) from exc
+
+        elapsed = time.perf_counter() - start
+        logger.info("[PERF] Total review: %.2fs", elapsed)
 
         error = final_state.get("error")
         if error:

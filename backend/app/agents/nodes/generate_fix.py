@@ -1,11 +1,22 @@
 """
 generate_fix node: if the review found issues, asks Gemini to produce
 corrected code + an explanation, structured via FixOutput.
+
+Note: this node is only reached by the graph when review_code found
+actual issues in the issues list (see agents/nodes/decision.py's
+route_after_review and agents/graph.py) — so the "no issues" guard
+below is now mostly a defensive fallback rather than the primary
+mechanism for skipping the Gemini call.
 """
+
+import logging
+import time
 
 from app.agents.state import ReviewState
 from app.models.review import FixOutput
 from app.services.gemini import gemini_service, GeminiServiceError
+
+logger = logging.getLogger("codepilot.agents.generate_fix")
 
 SYSTEM_INSTRUCTION = """\
 You are a senior software engineer fixing bugs found in a code review.
@@ -76,6 +87,7 @@ def generate_fix(state: ReviewState) -> ReviewState:
 
     prompt = "\n".join(prompt_parts)
 
+    start = time.perf_counter()
     try:
         fix_output: FixOutput = gemini_service.generate_structured(
             prompt=prompt,
@@ -83,12 +95,17 @@ def generate_fix(state: ReviewState) -> ReviewState:
             system_instruction=SYSTEM_INSTRUCTION,
         )
     except GeminiServiceError as exc:
+        elapsed = time.perf_counter() - start
+        logger.info("[PERF] Gemini fix: %.2fs", elapsed)
         return {
             "error": f"Fix generation failed: {exc}",
             "fixed_code": None,
             "fix_explanation": None,
             "fix_changed": False,
         }
+
+    elapsed = time.perf_counter() - start
+    logger.info("[PERF] Gemini fix: %.2fs", elapsed)
 
     return {
         "fixed_code": fix_output.fixed_code,

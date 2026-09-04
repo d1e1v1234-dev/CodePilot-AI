@@ -1,14 +1,44 @@
 """
 decision node: finalizes the workflow output once validation has
-either passed or the retry budget is exhausted. Also exposes a router
-function used by the graph's conditional edges to decide whether to
-retry generate_fix, or stop.
+either passed or the retry budget is exhausted. Also exposes router
+functions used by the graph's conditional edges:
+
+- route_after_review: decides whether to run generate_fix at all,
+  based on the actual issues list from the review (not the overall
+  score) — if there are no meaningful issues, the workflow skips
+  straight to decision/END without calling generate_fix or
+  validate_fix.
+- route_after_decision: decides whether to retry generate_fix (at
+  most once) or stop.
 """
+
+import logging
 
 from app.agents.state import ReviewState
 from app.models.review import ReviewResponse, SourceReference
 
-MAX_RETRIES = 2
+logger = logging.getLogger("codepilot.agents.decision")
+
+# At most ONE retry after the initial fix attempt.
+MAX_RETRIES = 1
+
+
+def route_after_review(state: ReviewState) -> str:
+    """
+    Conditional edge router, called right after the `review_code`
+    node runs. Skips fix generation entirely when there's nothing to
+    fix, based on the actual issues list — not the overall_score.
+    """
+    if state.get("error"):
+        # Review itself failed; nothing to fix, go straight to
+        # decision so it can report the error and end.
+        return "decision"
+
+    gemini_output = state.get("gemini_output")
+    if gemini_output is None or not gemini_output.issues:
+        return "decision"
+
+    return "generate_fix"
 
 
 def finalize(state: ReviewState) -> ReviewState:

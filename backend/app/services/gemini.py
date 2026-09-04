@@ -69,16 +69,19 @@ class GeminiService:
         prompt: str,
         response_model: type[T],
         system_instruction: str | None = None,
-        max_attempts: int = 3,
+        max_attempts: int = 1,
     ) -> T:
         """
         Send a prompt to Gemini and force the output to match
         `response_model`'s schema using LangChain's structured output.
         Returns a validated instance of `response_model`.
 
-        If the first attempt returns a response missing required
-        fields, retries once with the validation error appended to
-        the prompt so Gemini can self-correct.
+        MVP default is a single attempt (max_attempts=1): no
+        self-correction retry round-trip. If the response fails
+        schema validation, this raises a clean GeminiServiceError
+        immediately instead of re-prompting Gemini. Callers that
+        genuinely need the self-correction retry can still pass a
+        higher `max_attempts` explicitly.
 
         Raises:
             GeminiServiceError: on missing key, empty prompt, API

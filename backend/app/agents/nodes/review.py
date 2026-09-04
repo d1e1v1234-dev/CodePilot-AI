@@ -3,10 +3,15 @@ review_code node: builds the review prompt (code + language + retrieved
 context) and calls the existing GeminiService for a structured review.
 """
 
+import logging
+import time
+
 from app.agents.state import ReviewState
 from app.models.review import GeminiReviewOutput
 from app.services.gemini import gemini_service, GeminiServiceError
 from app.services.rag import RetrievedChunk
+
+logger = logging.getLogger("codepilot.agents.review")
 
 SYSTEM_INSTRUCTION = """\
 You are a senior software engineer performing a strict code review.
@@ -70,6 +75,7 @@ def review_code(state: ReviewState) -> ReviewState:
 
     prompt = _build_prompt(code, language, chunks)
 
+    start = time.perf_counter()
     try:
         gemini_output = gemini_service.generate_structured(
             prompt=prompt,
@@ -77,6 +83,11 @@ def review_code(state: ReviewState) -> ReviewState:
             system_instruction=SYSTEM_INSTRUCTION,
         )
     except GeminiServiceError as exc:
+        elapsed = time.perf_counter() - start
+        logger.info("[PERF] Gemini review: %.2fs", elapsed)
         return {"gemini_output": None, "error": str(exc)}
+
+    elapsed = time.perf_counter() - start
+    logger.info("[PERF] Gemini review: %.2fs", elapsed)
 
     return {"gemini_output": gemini_output, "error": None}

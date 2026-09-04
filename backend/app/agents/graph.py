@@ -1,9 +1,10 @@
 """
 Compiles the code review + fix-generation LangGraph workflow:
 
-    START -> retrieve_context -> review_code -> generate_fix
-          -> validate_fix -> decision
-          -> (conditional) -> increment_retry -> generate_fix  [retry]
+    START -> retrieve_context -> review_code
+          -> (conditional) -> generate_fix -> validate_fix -> decision   [issues found]
+          -> (conditional) -> decision                                  [no issues / error]
+          -> (conditional) -> increment_retry -> generate_fix  [retry, at most once]
           -> (conditional) -> END                              [done]
 
 Each node reuses the existing RAGService/GeminiService/
@@ -18,7 +19,12 @@ from app.agents.nodes.retrieve import retrieve_context
 from app.agents.nodes.review import review_code
 from app.agents.nodes.generate_fix import generate_fix
 from app.agents.nodes.validate_fix import validate_fix
-from app.agents.nodes.decision import finalize, route_after_decision, increment_retry
+from app.agents.nodes.decision import (
+    finalize,
+    route_after_decision,
+    route_after_review,
+    increment_retry,
+)
 
 
 def build_review_graph():
@@ -33,7 +39,21 @@ def build_review_graph():
 
     builder.add_edge(START, "retrieve_context")
     builder.add_edge("retrieve_context", "review_code")
-    builder.add_edge("review_code", "generate_fix")
+
+    # If review found no meaningful issues (or review itself failed),
+    # skip generate_fix and validate_fix entirely and go straight to
+    # decision — this is what actually avoids the unnecessary Gemini
+    # fix call and the validation pass, not just short-circuiting
+    # inside those nodes.
+    builder.add_conditional_edges(
+        "review_code",
+        route_after_review,
+        {
+            "generate_fix": "generate_fix",
+            "decision": "decision",
+        },
+    )
+
     builder.add_edge("generate_fix", "validate_fix")
     builder.add_edge("validate_fix", "decision")
 

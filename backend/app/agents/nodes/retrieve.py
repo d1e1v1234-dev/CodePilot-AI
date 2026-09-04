@@ -11,8 +11,13 @@ so the review proceeds using Gemini's own language-aware knowledge
 only, without RAG grounding.
 """
 
+import logging
+import time
+
 from app.agents.state import ReviewState
 from app.services.rag import rag_service, RAGServiceError
+
+logger = logging.getLogger("codepilot.agents.retrieve")
 
 # The current knowledge base is Python/FastAPI/OWASP-specific. Only
 # attach RAG context for languages it actually applies to.
@@ -20,9 +25,12 @@ LANGUAGES_WITH_RAG_SUPPORT = {"python"}
 
 
 def retrieve_context(state: ReviewState) -> ReviewState:
+    start = time.perf_counter()
     language = state.get("language", "python")
 
     if language not in LANGUAGES_WITH_RAG_SUPPORT:
+        elapsed = time.perf_counter() - start
+        logger.info("[PERF] RAG retrieval: %.2fs", elapsed)
         return {"retrieved_chunks": []}
 
     code = state.get("code", "")
@@ -33,5 +41,8 @@ def retrieve_context(state: ReviewState) -> ReviewState:
         chunks = []
     except Exception:  # noqa: BLE001 - never let RAG break the workflow
         chunks = []
+
+    elapsed = time.perf_counter() - start
+    logger.info("[PERF] RAG retrieval: %.2fs", elapsed)
 
     return {"retrieved_chunks": chunks}

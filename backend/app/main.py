@@ -9,6 +9,7 @@ Exposes:
 """
 
 import logging
+import time
 
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
@@ -83,6 +84,7 @@ def test_gemini(payload: TestGeminiRequest) -> TestGeminiResponse:
 
 @app.post("/api/review", response_model=ReviewResponse)
 def review_code(payload: ReviewRequest) -> ReviewResponse:
+    request_start = time.perf_counter()
     code = payload.code.strip()
 
     if not code:
@@ -100,7 +102,7 @@ def review_code(payload: ReviewRequest) -> ReviewResponse:
         )
 
     try:
-        return review_service.review_code(code, language)
+        result = review_service.review_code(code, language)
     except ReviewServiceError as exc:
         logger.warning("Code review failed: %s", exc)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
@@ -109,10 +111,16 @@ def review_code(payload: ReviewRequest) -> ReviewResponse:
         raise HTTPException(
             status_code=500, detail="Internal server error."
         ) from exc
+    else:
+        elapsed = time.perf_counter() - request_start
+        logger.info("[PERF] Total request (/api/review): %.2fs", elapsed)
+        return result
 
 
 @app.post("/api/extract-code", response_model=ExtractCodeResponse)
 async def extract_code(file: UploadFile = File(...)) -> ExtractCodeResponse:
+    request_start = time.perf_counter()
+
     if file.content_type not in ALLOWED_IMAGE_MIME_TYPES:
         raise HTTPException(
             status_code=415,
@@ -134,7 +142,10 @@ async def extract_code(file: UploadFile = File(...)) -> ExtractCodeResponse:
         )
 
     try:
-        return extract_service.extract_code(image_bytes, file.content_type)
+        gemini_start = time.perf_counter()
+        result = extract_service.extract_code(image_bytes, file.content_type)
+        gemini_elapsed = time.perf_counter() - gemini_start
+        logger.info("[PERF] Gemini extraction: %.2fs", gemini_elapsed)
     except ExtractServiceError as exc:
         logger.warning("Code extraction failed: %s", exc)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
@@ -143,5 +154,9 @@ async def extract_code(file: UploadFile = File(...)) -> ExtractCodeResponse:
         raise HTTPException(
             status_code=500, detail="Internal server error."
         ) from exc
+    else:
+        elapsed = time.perf_counter() - request_start
+        logger.info("[PERF] Total request (/api/extract-code): %.2fs", elapsed)
+        return result
     finally:
         await file.close()
