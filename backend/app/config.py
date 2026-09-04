@@ -18,7 +18,7 @@ class Settings:
     GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
 
     GEMINI_EMBEDDING_MODEL: str = os.getenv(
-        "GEMINI_EMBEDDING_MODEL", "models/gemini-embedding-001"
+        "GEMINI_EMBEDDING_MODEL", "models/gemini-embedding-2"
     )
 
     # Origins allowed to call this API from the browser during local
